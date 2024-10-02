@@ -4,10 +4,12 @@ require('dotenv').config()
 
 const PORT = process.env.PORT || 5000
 const wss = new WebSocket.Server({ port: PORT });
+const clients = new Set() //sparar alla klienter här
+
 
 // URL example: ws://my-server?token=my-secret-token
 wss.on('connection', (ws, req) => {
-    console.log('Client connected');
+    console.log(`Client connected: ${req.headers ['sec-websocket-key']}`);
 
     // Check valid token (set token in .env as TOKEN=my-secret-token )
     const urlParams = new URLSearchParams(req.url.slice(1));
@@ -20,19 +22,27 @@ wss.on('connection', (ws, req) => {
         ws.close();
     }
 
-    ws.on('message', (message) => {
-        console.log('Received message:', message);
+    if (!clients.has(ws)) {
+        clients.add(ws);
+    }
+    console.log(`Client count: ${clients.size}`);
 
-        // Send a response back to the client along with some other info
-        ws.send(JSON.stringify({
-            status: 0,
-            msg: String(message).toUpperCase(),
-            freemem: Math.round(os.freemem() / 1024 / 1024), // MB
-            totalmem: Math.round(os.totalmem() / 1024 / 1024) // MB
-        }));
+    ws.on('message', (message) => {
+
+        const msgString = String(message);
+
+        console.log('Received message:', msgString);
+
+        clients.forEach(client => {
+            client.send(JSON.stringify({
+                status: 0,
+                msg: String(message)
+            }));
+        })
     });
 
     ws.on('close', () => {
+        clients.delete(ws);
         console.log('Client disconnected');
     });
 });
