@@ -1,17 +1,15 @@
-const WebSocket = require('ws')
-const os = require('os')
-require('dotenv').config()
+const WebSocket = require('ws');
+require('dotenv').config();
 
-const PORT = process.env.PORT || 5000
+const PORT = process.env.PORT || 5000;
 const wss = new WebSocket.Server({ port: PORT });
-const clients = new Set() //sparar alla klienter här
+const clients = new Set();
 
+const players = new Map();
 
-// URL example: ws://my-server?token=my-secret-token
 wss.on('connection', (ws, req) => {
-    console.log(`Client connected: ${req.headers ['sec-websocket-key']}`);
+    console.log(`Client connected: ${req.headers['sec-websocket-key']}`);
 
-    // Check valid token (set token in .env as TOKEN=my-secret-token )
     const urlParams = new URLSearchParams(req.url.slice(1));
     if (urlParams.get('token') !== process.env.TOKEN) {
         console.log('Invalid token: ' + urlParams.get('token'));
@@ -20,30 +18,58 @@ wss.on('connection', (ws, req) => {
             msg: 'ERROR: Invalid token.'
         }));
         ws.close();
+        return;
     }
 
-    if (!clients.has(ws)) {
-        clients.add(ws);
-    }
+    clients.add(ws);
     console.log(`Client count: ${clients.size}`);
 
-    ws.on('message', (message) => {
+    ws.on('message', (data) => {
+        const message = String(data);
+        console.log(`Received: ${message}`);
 
-        const msgString = String(message);
+        const [id, x, y, color] = message.split(':');
 
-        console.log('Received message:', msgString);
+        if (!ws.playerId) {
+            ws.playerId = id;
+        }
+
+        players.set(id, { id, x: parseInt(x), y: parseInt(y), color, width: 50, height: 50 });
+
+        const payload = JSON.stringify({
+            id,
+            x: parseInt(x),
+            y: parseInt(y),
+            color
+        });
 
         clients.forEach(client => {
-            if(client === ws) return;
-            client.send(JSON.stringify({
-                status: 0,
-                msg: String(message)
-            }));
-        })
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+                client.send(payload);
+            }
+        });
     });
 
     ws.on('close', () => {
         clients.delete(ws);
         console.log('Client disconnected');
+
+        if (ws.playerId) {
+            players.delete(ws.playerId);
+
+            const payload = JSON.stringify({
+                id: ws.playerId,
+                left: true
+            });
+            clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(payload);
+                }
+            });
+        }
+    });
+
+    players.forEach(player => {
+        ws.send(JSON.stringify(player));
     });
 });

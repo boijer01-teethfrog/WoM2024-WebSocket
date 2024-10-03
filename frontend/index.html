@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebSocket Demo</title>
+    <title>WebSocket</title>
 
 </head>
 
@@ -20,7 +20,7 @@
         console.log(WS_TOKEN);
 
         // Create a WebSocket connection
-        const socket = new WebSocket(`ws://localhost:8080?token=${WS_TOKEN}`);
+        const socket = new WebSocket(`ws://localhost:5000?token=${WS_TOKEN}`);
 
         // Connection established 
         socket.onopen = function (event) {
@@ -28,8 +28,8 @@
         };
 
         // Message listener
-        socket.onmessage = function (event) {
-            console.log('Received message:', event.data);
+        socket.onmessage = function (event, direction) {
+            console.log(`${direction}: ${event.data}`);
             const data = JSON.parse(event.data);
 
             if (data.status == 0) {
