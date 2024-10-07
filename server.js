@@ -25,29 +25,61 @@ wss.on('connection', (ws, req) => {
     console.log(`Client count: ${clients.size}`);
 
     ws.on('message', (data) => {
-        const message = String(data);
-        console.log(`Received: ${message}`);
+        try {
+            const message = JSON.parse(data);
 
-        const [id, x, y, color] = message.split(':');
-
-        if (!ws.playerId) {
-            ws.playerId = id;
-        }
-
-        players.set(id, { id, x: parseInt(x), y: parseInt(y), color, width: 50, height: 50 });
-
-        const payload = JSON.stringify({
-            id,
-            x: parseInt(x),
-            y: parseInt(y),
-            color
-        });
-
-        clients.forEach(client => {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(payload);
+            if (!message.type) {
+                throw new Error('Invalid message format: missing type');
             }
-        });
+
+            if (message.type === 'move') {
+                const { id, x, y, color } = message;
+
+                if (!ws.playerId) {
+                    ws.playerId = id;
+                }
+
+                players.set(id, { id, x: parseInt(x), y: parseInt(y), color, width: 50, height: 50 });
+
+                const payload = JSON.stringify({
+                    type: 'move',
+                    id,
+                    x: parseInt(x),
+                    y: parseInt(y),
+                    color
+                });
+
+                clients.forEach(client => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                        client.send(payload);
+                    }
+                });
+
+            } else if (message.type === 'chat') {
+                const { id, chatMessage } = message;
+
+                if (!ws.playerId) {
+                    ws.playerId = id;
+                }
+
+                const payload = JSON.stringify({
+                    type: 'chat',
+                    id,
+                    message: chatMessage
+                });
+
+                clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(payload);
+                    }
+                });
+
+            } else {
+                console.error('Unknown message type:', message.type);
+            }
+        } catch (error) {
+            console.error('Error processing message:', error.message);
+        }
     });
 
     ws.on('close', () => {
@@ -58,6 +90,7 @@ wss.on('connection', (ws, req) => {
             players.delete(ws.playerId);
 
             const payload = JSON.stringify({
+                type: 'move', 
                 id: ws.playerId,
                 left: true
             });
@@ -70,6 +103,6 @@ wss.on('connection', (ws, req) => {
     });
 
     players.forEach(player => {
-        ws.send(JSON.stringify(player));
+        ws.send(JSON.stringify({ type: 'move', ...player }));
     });
 });
