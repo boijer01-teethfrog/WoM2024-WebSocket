@@ -34,13 +34,15 @@ wss.on('connection', (ws, req) => {
             ws.playerId = id;
         }
 
-        players.set(id, { id, x: parseInt(x), y: parseInt(y), color, width: 50, height: 50 });
+        players.set(id, { id, x: parseInt(x), y: parseInt(y), color, width: parseInt(width), height: parseInt(height) });
 
         const payload = JSON.stringify({
             id,
             x: parseInt(x),
             y: parseInt(y),
-            color
+            color,
+            width: parseInt(width),
+            height: parseInt(height)
         });
 
         clients.forEach(client => {
