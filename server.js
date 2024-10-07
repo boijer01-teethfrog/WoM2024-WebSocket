@@ -28,7 +28,7 @@ wss.on('connection', (ws, req) => {
         const message = String(data);
         console.log(`Received: ${message}`);
 
-        const [id, x, y, color, width, height] = message.split(':');
+        const [id, x, y, color] = message.split(':');
 
         if (!ws.playerId) {
             ws.playerId = id;
