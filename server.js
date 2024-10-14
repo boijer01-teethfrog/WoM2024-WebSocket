@@ -55,7 +55,7 @@ wss.on('connection', (ws, req) => {
             }
 
             if (message.type === 'move') {
-                const { id, x, y, color, roomId: msgRoomId } = message;
+                const { id, x, y, width, height, color, roomId: msgRoomId  } = message;
 
                 if (msgRoomId !== ws.roomId) {
                     console.warn(`Meddelande från fel rum: ${msgRoomId}`);
@@ -66,15 +66,18 @@ wss.on('connection', (ws, req) => {
                     ws.playerId = id;
                 }
 
-                roomPlayers.set(id, { id, x: parseInt(x), y: parseInt(y), color, width: 50, height: 50 });
+                roomPlayers.set(id, { id, x: parseInt(x), y: parseInt(y), width: parseInt(width), height: parseInt(height), color });
 
                 const payload = JSON.stringify({
                     type: 'move',
                     id,
                     x: parseInt(x),
                     y: parseInt(y),
+                    width: parseInt(width),
+                    height: parseInt(height),
                     color,
                     roomId: ws.roomId 
+
                 });
 
 
