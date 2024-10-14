@@ -33,20 +33,23 @@ wss.on('connection', (ws, req) => {
             }
 
             if (message.type === 'move') {
-                const { id, x, y, color } = message;
+                const { id, x, y, width, height, color  } = message;
 
                 if (!ws.playerId) {
                     ws.playerId = id;
                 }
 
-                players.set(id, { id, x: parseInt(x), y: parseInt(y), color, width: 50, height: 50 });
+                players.set(id, { id, x: parseInt(x), y: parseInt(y), width: parseInt(width), height: parseInt(height), color });
 
                 const payload = JSON.stringify({
                     type: 'move',
                     id,
                     x: parseInt(x),
                     y: parseInt(y),
+                    width: parseInt(width),
+                    height: parseInt(height),
                     color
+
                 });
 
                 clients.forEach(client => {
@@ -57,7 +60,6 @@ wss.on('connection', (ws, req) => {
 
             } else if (message.type === 'chat') {
                 const { id, chatMessage } = message;
-
                 if (!ws.playerId) {
                     ws.playerId = id;
                 }
