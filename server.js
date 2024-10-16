@@ -1,23 +1,27 @@
-// server.js
-
 const WebSocket = require('ws');
 require('dotenv').config();
 
 const PORT = process.env.PORT || 5000;
 const wss = new WebSocket.Server({ port: PORT });
-const clients = new Set();
-
-const players = new Map(); 
+const clients = new Map();
+const players = new Map();
 
 wss.on('connection', (ws, req) => {
     console.log(`Client connected: ${req.headers['sec-websocket-key']}`);
 
-    const urlParams = new URLSearchParams(req.url.slice(1)); 
-    const token = urlParams.get('token');
-    const roomId = urlParams.get('roomId'); 
+    const urlParams = new URLSearchParams(req.url.slice(1));
+    const roomId = urlParams.get('roomId');
+    if (!roomId) {
+        ws.send(JSON.stringify({
+            status: 1,
+            msg: 'ERROR: Missing roomId.'
+        }));
+        ws.close();
+        return;
+    }
 
-    if (token !== process.env.TOKEN) {
-        console.log('Invalid token: ' + token);
+    if (urlParams.get('token') !== process.env.TOKEN) {
+        console.log('Invalid token: ' + urlParams.get('token'));
         ws.send(JSON.stringify({
             status: 1,
             msg: 'ERROR: Invalid token.'
@@ -26,25 +30,15 @@ wss.on('connection', (ws, req) => {
         return;
     }
 
-    if (!roomId) {
-        console.log('Room ID missing');
-        ws.send(JSON.stringify({
-            status: 1,
-            msg: 'ERROR: Room ID missing.'
-        }));
-        ws.close();
-        return;
+    if (!clients.has(roomId)) {
+        clients.set(roomId, new Set());
     }
+    clients.get(roomId).add(ws);
+    console.log(`Client count in room ${roomId}: ${clients.get(roomId).size}`);
 
-    clients.add(ws);
-    ws.roomId = roomId; 
-    console.log(`Client count: ${clients.size} in room: ${roomId}`);
-
-
-    if (!players.has(roomId)) {
-        players.set(roomId, new Map());
-    }
-    const roomPlayers = players.get(roomId);
+    ws.roomId = roomId;
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
 
     ws.on('message', (data) => {
         try {
@@ -55,46 +49,32 @@ wss.on('connection', (ws, req) => {
             }
 
             if (message.type === 'move') {
-                const { id, x, y, width, height, color, roomId: msgRoomId  } = message;
-
-                if (msgRoomId !== ws.roomId) {
-                    console.warn(`Meddelande från fel rum: ${msgRoomId}`);
-                    return; 
-                }
+                const { id, x, y, width, height, color } = message;
 
                 if (!ws.playerId) {
                     ws.playerId = id;
                 }
 
-                roomPlayers.set(id, { id, x: parseInt(x), y: parseInt(y), width: parseInt(width), height: parseInt(height), color });
+                players.set(id, { id, x: parseInt(x, 10), y: parseInt(y, 10), width: parseInt(width, 10), height: parseInt(height, 10), color });
 
                 const payload = JSON.stringify({
                     type: 'move',
                     id,
-                    x: parseInt(x),
-                    y: parseInt(y),
-                    width: parseInt(width),
-                    height: parseInt(height),
-                    color,
-                    roomId: ws.roomId 
-
+                    x: parseInt(x, 10),
+                    y: parseInt(y, 10),
+                    width: parseInt(width, 10),
+                    height: parseInt(height, 10),
+                    color
                 });
 
-
-                clients.forEach(client => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN && client.roomId === ws.roomId) {
+                clients.get(ws.roomId).forEach(client => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN) {
                         client.send(payload);
                     }
                 });
 
             } else if (message.type === 'chat') {
-                const { id, message: chatMessage, roomId: msgRoomId } = message;
-
-                if (msgRoomId !== ws.roomId) {
-                    console.warn(`Chat-meddelande från fel rum: ${msgRoomId}`);
-                    return;
-                }
-
+                const { id, chatMessage } = message;
                 if (!ws.playerId) {
                     ws.playerId = id;
                 }
@@ -102,13 +82,11 @@ wss.on('connection', (ws, req) => {
                 const payload = JSON.stringify({
                     type: 'chat',
                     id,
-                    message: chatMessage,
-                    roomId: ws.roomId 
+                    message: chatMessage
                 });
 
-
-                clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN && client.roomId === ws.roomId) {
+                clients.get(ws.roomId).forEach(client => {
+                    if (client.readyState === WebSocket.OPEN) {
                         client.send(payload);
                     }
                 });
@@ -122,34 +100,36 @@ wss.on('connection', (ws, req) => {
     });
 
     ws.on('close', () => {
-        clients.delete(ws);
-        console.log('Client disconnected');
+        if (clients.has(ws.roomId)) {
+            clients.get(ws.roomId).delete(ws);
+            console.log(`Client disconnected from room ${ws.roomId}`);
 
-        if (ws.playerId && players.has(ws.roomId)) {
-            const roomPlayers = players.get(ws.roomId);
-            roomPlayers.delete(ws.playerId);
+            if (clients.get(ws.roomId).size === 0) {
+                clients.delete(ws.roomId);
+            }
+        }
+
+        if (ws.playerId) {
+            players.delete(ws.playerId);
 
             const payload = JSON.stringify({
                 type: 'move',
                 id: ws.playerId,
-                left: true,
-                roomId: ws.roomId 
+                left: true
             });
-
-            clients.forEach(client => {
-                if (client.readyState === WebSocket.OPEN && client.roomId === ws.roomId) {
-                    client.send(payload);
-                }
-            });
-
-
-            if (roomPlayers.size === 0) {
-                players.delete(ws.roomId);
+            if (clients.has(ws.roomId)) {
+                clients.get(ws.roomId).forEach(client => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(payload);
+                    }
+                });
             }
         }
     });
 
-    roomPlayers.forEach(player => {
-        ws.send(JSON.stringify({ type: 'move', ...player, roomId: ws.roomId }));
+    players.forEach(player => {
+        if (ws.roomId === player.roomId) {
+            ws.send(JSON.stringify({ type: 'move', ...player }));
+        }
     });
 });
